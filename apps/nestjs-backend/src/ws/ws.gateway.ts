@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@nestjs/websockets';
 import { WebSocketGateway } from '@nestjs/websockets';
-import WebSocketJSONStream from '@teamwork/websocket-json-stream';
+import { ShareDbWebSocketServer } from '@teable/v2-adapter-realtime-sharedb';
 import type { Request } from 'express';
 import type WebSocketLib from 'ws';
 import { ShareDbService } from '../share-db/share-db.service';
@@ -9,8 +9,11 @@ import { ShareDbService } from '../share-db/share-db.service';
 @WebSocketGateway({ path: '/socket', perMessageDeflate: true })
 export class WsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private logger = new Logger(WsGateway.name);
+  private readonly shareDbWebSocket: ShareDbWebSocketServer;
 
-  constructor(private readonly shareDb: ShareDbService) {}
+  constructor(private readonly shareDb: ShareDbService) {
+    this.shareDbWebSocket = new ShareDbWebSocketServer(shareDb);
+  }
 
   handleDisconnect() {
     this.logger.log('ws:on:close');
@@ -25,8 +28,7 @@ export class WsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayD
     server.on('connection', async (webSocket, request: Request) => {
       try {
         this.logger.log('ws:on:connection');
-        const stream = new WebSocketJSONStream(webSocket);
-        this.shareDb.listen(stream, request);
+        this.shareDbWebSocket.handleConnection(webSocket, request);
       } catch (error) {
         webSocket.send(JSON.stringify({ error }));
         webSocket.close();
